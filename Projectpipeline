@@ -1,0 +1,137 @@
+// =============================================================================
+// Jenkins Declarative Pipeline — Playwright JavaScript CI/CD (WINDOWS)
+// File name : Projectpipeline  (set as "Script Path" in Jenkins multibranch job)
+// Project   : Playwright_Interactive_automation
+// =============================================================================
+//
+// INTERVIEW TALKING POINTS (high level):
+// 1. CI  = every commit/PR → install deps → run Playwright headless → publish report
+// 2. CD  = only on main branch after tests pass → archive artifacts / trigger deploy
+// 3. Jenkins agent runs on Windows → use bat (not sh); no --with-deps for Playwright
+//
+// Jenkins job setup (Windows):
+//   - New Item → Pipeline
+//   - Pipeline → "Pipeline script from SCM" → Git → Script Path: Projectpipeline
+//   - Install plugins: NodeJS, HTML Publisher, JUnit (usually pre-installed)
+//   - Manage Jenkins → Tools → NodeJS → name it "NodeJS-20" (match NODE_TOOL below)
+//   - Jenkins agent must be a Windows node (master or Windows slave)
+// =============================================================================
+
+pipeline {
+    agent any
+
+    // ---- Global variables used across stages ----
+    environment {
+        NODE_TOOL                = 'NodeJS-20'   // Jenkins global tool name (configure in Jenkins)
+        PLAYWRIGHT_BROWSERS_PATH = '0'           // install browsers inside project workspace
+        CI                       = 'true'        // headless mode + junit report in playwright.config.js
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 30, unit: 'MINUTES')
+        timestamps()
+    }
+
+    triggers {
+        pollSCM('H/5 * * * *')   // poll Git every ~5 min; use webhook in real projects
+    }
+
+    stages {
+
+        // -----------------------------------------------------------------
+        // STAGE 1 — Checkout source code from Git
+        // -----------------------------------------------------------------
+        stage('Checkout') {
+            steps {
+                echo '>>> Pulling latest code from repository'
+                checkout scm
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // STAGE 2 — Install Node dependencies (npm ci = clean, reproducible)
+        // -----------------------------------------------------------------
+        stage('Install Dependencies') {
+            steps {
+                echo '>>> Installing npm packages'
+                nodejs(nodeJSInstallationName: "${NODE_TOOL}") {
+                    bat 'node -v && npm -v'
+                    bat 'npm ci'
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // STAGE 3 — Install Playwright Chromium (Windows: no --with-deps)
+        // -----------------------------------------------------------------
+        stage('Install Playwright Browsers') {
+            steps {
+                echo '>>> Downloading Chromium for Windows'
+                nodejs(nodeJSInstallationName: "${NODE_TOOL}") {
+                    // --with-deps is Linux-only; on Windows just install the browser
+                    bat 'call npx playwright install chromium'
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // STAGE 4 — Run Playwright tests (CI = headless, junit + html reports)
+        // -----------------------------------------------------------------
+        stage('Run Playwright Tests') {
+            steps {
+                echo '>>> Executing Playwright test suite'
+                nodejs(nodeJSInstallationName: "${NODE_TOOL}") {
+                    bat '''
+                        if not exist test-results mkdir test-results
+                        call npx playwright test tests --config=playwright.config.js
+                    '''
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'test-results/junit.xml'
+                    archiveArtifacts artifacts: 'playwright-report/**, test-results/**', allowEmptyArchive: true
+                    publishHTML([
+                        allowMissing         : true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll              : true,
+                        reportDir            : 'playwright-report',
+                        reportFiles          : 'index.html',
+                        reportName           : 'Playwright HTML Report',
+                        reportTitles         : 'Playwright Report'
+                    ])
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // STAGE 5 — CD: deploy / notify only when tests pass on main branch
+        // -----------------------------------------------------------------
+        stage('Deploy (CD)') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+                }
+            }
+            steps {
+                echo '>>> Tests passed on main — CD step runs here'
+                echo '>>> Examples: xcopy to server, run deploy.bat, trigger Docker build, send Slack'
+                // bat 'call scripts\\deploy.bat'   // uncomment when you have a real deploy script
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully'
+        }
+        failure {
+            echo 'Pipeline failed — check Playwright HTML report and console log'
+        }
+        unstable {
+            echo 'Tests had failures — review junit.xml and screenshots in test-results/'
+        }
+    }
+}

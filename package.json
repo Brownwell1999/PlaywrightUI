@@ -1,0 +1,25 @@
+{
+  "name": "playwright_interactive_automation",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx playwright test tests/Webapi.spec.js --headed",
+    "bddgen": "npx bddgen -c playwright.config.bdd.ts",
+    "test:bdd": "npm run bddgen && npx playwright test -c playwright.config.bdd.ts",
+    "test:bdd:json": "npm run bddgen && npx playwright test -c playwright.config.bdd.ts features/login-with-json.feature",
+    "test:bdd:excel": "npm run bddgen && npx playwright test -c playwright.config.bdd.ts features/login-with-excel.feature",
+    "create:excel": "node scripts/createLoginExcel.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@types/node": "^25.6.0",
+    "exceljs": "^4.4.0",
+    "playwright-bdd": "^9.2.0",
+    "typescript": "^6.0.3"
+  }
+}
