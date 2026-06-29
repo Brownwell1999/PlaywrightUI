@@ -15,7 +15,7 @@ test('browser Playwright Test', async ({ page }) =>
         await username.type('rahulshettyacademy');
         await password.fill('Learning@830$3mK2');
         await signInBtn.click();
-       // console.log(await pagetitles.first().textContent());
+        console.log(await pagetitles.first().textContent()); // change
         //console.log(await pagetitles.nth(2).textContent());
 
         console.log(await pagetitles.allTextContents());
